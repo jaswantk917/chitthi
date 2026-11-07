@@ -74,7 +74,7 @@ fun SettingsSheet(
             Text("Settings", style = MaterialTheme.typography.headlineMediumEmphasized)
             Spacer(Modifier.height(16.dp))
 
-            Section(Icons.Rounded.PaletteIcon, "Colours", "Chitthi's own purple, or Material You from your wallpaper") {}
+            Section(Icons.Rounded.PaletteIcon, "Colours", "Messages blue, or Material You from your wallpaper") {}
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),

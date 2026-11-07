@@ -11,13 +11,13 @@
             android:pathData="M37,37h34a10,10 0,0 1,10 10v18a10,10 0,0 1,-10 10h-34a10,10 0,0 1,-10 -10v-18a10,10 0,0 1,10 -10z" />
         <path
             android:pathData="M37,47L50.8,57.4a5.4,5.4 0,0 0,6.4 0L71,47"
-            android:strokeColor="#FF5A3BE6"
+            android:strokeColor="#FF1A73E8"
             android:strokeWidth="5"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
     </group>
     <path
-        android:fillColor="#FF5636D9"
+        android:fillColor="#FF2D74DD"
         android:pathData="M68.5,35.5a10,10 0,1 0,20 0a10,10 0,1 0,-20 0z" />
     <path
         android:fillColor="#FFFF8A65"

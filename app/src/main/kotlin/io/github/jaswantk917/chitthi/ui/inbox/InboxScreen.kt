@@ -48,6 +48,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DoneAll
@@ -135,7 +136,13 @@ interface InboxActions {
 private val categories = Category.entries
 
 @Composable
-fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHostState) {
+fun InboxScreen(
+    state: InboxState,
+    actions: InboxActions,
+    snackbar: SnackbarHostState,
+    /** chats with a message waiting to be sent */
+    scheduledKeys: Set<String> = emptySet(),
+) {
     val pager = rememberPagerState { categories.size }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
@@ -204,6 +211,7 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
                     listState = listStates[page],
                     contentPadding = PaddingValues(top = headerHeight + 4.dp, bottom = navBottom + 112.dp),
                     seen = seen,
+                    scheduledKeys = scheduledKeys,
                     actions = actions,
                     onLongPress = { menuFor = it },
                 )
@@ -382,6 +390,7 @@ private fun CategoryPage(
     listState: LazyListState,
     contentPadding: PaddingValues,
     seen: MutableSet<Any>,
+    scheduledKeys: Set<String>,
     actions: InboxActions,
     onLongPress: (Conversation) -> Unit,
 ) {
@@ -404,6 +413,7 @@ private fun CategoryPage(
             val haptics = rememberHaptics()
             ConversationRow(
                 conversation,
+                scheduled = conversation.senderKey in scheduledKeys,
                 onClick = { actions.open(conversation) },
                 onLongPress = { haptics.play(Haptic.Hold); onLongPress(conversation) },
                 modifier = Modifier.animateItem().arrive(conversation.senderKey + category, index, seen),
@@ -413,7 +423,13 @@ private fun CategoryPage(
 }
 
 @Composable
-private fun ConversationRow(conversation: Conversation, onClick: () -> Unit, onLongPress: () -> Unit, modifier: Modifier = Modifier) {
+private fun ConversationRow(
+    conversation: Conversation,
+    scheduled: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val interaction = remember { MutableInteractionSource() }
     val unread = conversation.unread > 0
     val scheme = MaterialTheme.colorScheme
@@ -448,6 +464,13 @@ private fun ConversationRow(conversation: Conversation, onClick: () -> Unit, onL
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
+                AnimatedVisibility(scheduled, enter = scaleIn(spring(dampingRatio = 0.45f)) + fadeIn(), exit = scaleOut() + fadeOut()) {
+                    Icon(
+                        Icons.Rounded.Schedule, "Scheduled message",
+                        tint = scheme.primary,
+                        modifier = Modifier.padding(end = 4.dp).size(14.dp),
+                    )
+                }
                 Text(
                     shortTime(conversation.latest.date),
                     style = MaterialTheme.typography.labelMedium,

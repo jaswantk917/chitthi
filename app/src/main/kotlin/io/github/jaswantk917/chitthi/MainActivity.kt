@@ -273,7 +273,11 @@ class MainActivity : ComponentActivity() {
                         drawRect(Color.Black.copy(alpha = SCRIM * depth * (1f - backProgress)))
                     },
             ) {
-                InboxScreen(state, inboxActions, snackbar)
+                val scheduleTick by Scheduler.changes.collectAsState()
+                val scheduledKeys by produceState(emptySet<String>(), scheduleTick) {
+                    value = withContext(Dispatchers.IO) { Scheduler.pending().mapTo(HashSet()) { it.senderKey } }
+                }
+                InboxScreen(state, inboxActions, snackbar, scheduledKeys)
             }
 
             var popping by remember { mutableStateOf(false) }

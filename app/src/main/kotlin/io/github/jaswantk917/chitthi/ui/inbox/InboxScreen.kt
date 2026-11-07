@@ -3,6 +3,7 @@ package io.github.jaswantk917.chitthi.ui.inbox
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -75,6 +76,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -155,6 +163,26 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
     LaunchedEffect(pager) {
         snapshotFlow { pager.currentPage }.distinctUntilChanged().drop(1).collect { haptics.play(Haptic.Segment) }
     }
+    // a collapsed header over a list sitting at its top leaves a gap the title's height:
+    // pages off screen scroll with the header, and a page too short to do that opens the header on arrival
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.currentPage to collapse }.collect { (current, c) ->
+            listStates.forEachIndexed { i, list ->
+                if (i != current && list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < c) {
+                    list.scrollToItem(0, c.toInt())
+                }
+            }
+        }
+    }
+    val reveal = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage }.collect { page ->
+            val list = listStates[page]
+            if (list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < collapse) {
+                animate(collapse, list.firstVisibleItemScrollOffset.toFloat(), animationSpec = reveal) { v, _ -> collapse = v }
+            }
+        }
+    }
 
     val currentList = listStates[pager.currentPage]
     val expandedFab by remember(currentList) {
@@ -190,6 +218,7 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
             selected = pager.currentPage,
             unread = categories.map { c -> state.conversations[c].orEmpty().sumOf { it.unread } },
             onSelect = { scope.launch { pager.animateScrollToPage(it) } },
+            onMarkAllRead = actions::markAllRead,
             actions = actions,
             collapse = { collapse },
             onTitleHeight = { titleHeight = it.toFloat() },
@@ -237,6 +266,7 @@ private fun Header(
     selected: Int,
     unread: List<Int>,
     onSelect: (Int) -> Unit,
+    onMarkAllRead: (Category) -> Unit,
     actions: InboxActions,
     collapse: () -> Float,
     onTitleHeight: (Int) -> Unit,
@@ -299,29 +329,67 @@ private fun Header(
             modifier = Modifier.fillMaxWidth(),
         ) {
             itemsIndexed(categories) { i, category ->
-                ToggleButton(
-                    checked = i == selected,
-                    onCheckedChange = { onSelect(i) },
-                ) {
-                    Text(category.label, style = MaterialTheme.typography.labelLargeEmphasized)
-                    AnimatedVisibility(
-                        unread[i] > 0,
-                        enter = expandHorizontally(spring(dampingRatio = 0.6f)) + scaleIn(),
-                        exit = shrinkHorizontally() + scaleOut(),
+                var menu by remember { mutableStateOf(false) }
+                Box {
+                    ToggleButton(
+                        checked = i == selected,
+                        onCheckedChange = { onSelect(i) },
+                        modifier = Modifier.onLongPress {
+                            if (unread[i] > 0) { haptics.play(Haptic.Hold); menu = true }
+                        },
                     ) {
-                        Text(
-                            unread[i].coerceAtMost(999).toString(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (i == selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier
-                                .padding(start = 6.dp)
-                                .clip(CircleShape)
-                                .background(if (i == selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
-                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        Text(category.label, style = MaterialTheme.typography.labelLargeEmphasized)
+                        AnimatedVisibility(
+                            unread[i] > 0,
+                            enter = expandHorizontally(spring(dampingRatio = 0.6f)) + scaleIn(),
+                            exit = shrinkHorizontally() + scaleOut(),
+                        ) {
+                            Text(
+                                unread[i].coerceAtMost(999).toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (i == selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier
+                                    .padding(start = 6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (i == selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
+                                    .padding(horizontal = 6.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                    DropdownMenu(menu, onDismissRequest = { menu = false }, shape = MaterialTheme.shapes.large) {
+                        DropdownMenuItem(
+                            text = { Text("Mark ${unread[i]} read") },
+                            leadingIcon = { Icon(Icons.Rounded.DoneAll, null) },
+                            onClick = {
+                                haptics.play(Haptic.Success)
+                                menu = false
+                                onMarkAllRead(category)
+                            },
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+/** a long press that wins over the button's own click, so letting go doesn't also toggle it */
+private fun Modifier.onLongPress(action: () -> Unit) = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        // completes when the finger lifts or drifts into a scroll; null means it was held
+        val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            while (true) {
+                val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+            }
+        }
+        if (ended == null) {
+            action()
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                event.changes.forEach { it.consume() }
+            } while (event.changes.any { it.pressed })
         }
     }
 }
@@ -351,11 +419,6 @@ private fun CategoryPage(
         }
         if (conversations.isEmpty()) {
             item(key = "empty") { Empty(category, Modifier.animateItem()) }
-        }
-        if (conversations.any { it.unread > 0 }) {
-            item(key = "mark-all") {
-                MarkAllRead({ actions.markAllRead(category) }, Modifier.animateItem())
-            }
         }
         items(conversations, key = { it.senderKey + "|" + it.category }) { conversation ->
             val index = conversations.indexOf(conversation)
@@ -524,18 +587,6 @@ private fun DefaultBanner(onMakeDefault: () -> Unit, modifier: Modifier = Modifi
         }
         Spacer(Modifier.width(8.dp))
         Button(onClick = onMakeDefault) { Text("Switch") }
-    }
-}
-
-@Composable
-private fun MarkAllRead(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val haptics = rememberHaptics()
-    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.End) {
-        androidx.compose.material3.TextButton(onClick = { haptics.play(Haptic.Success); onClick() }) {
-            Icon(Icons.Rounded.DoneAll, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Mark all read")
-        }
     }
 }
 

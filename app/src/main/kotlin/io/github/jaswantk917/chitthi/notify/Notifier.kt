@@ -19,6 +19,7 @@ import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import io.github.jaswantk917.chitthi.MainActivity
 import io.github.jaswantk917.chitthi.R
+import io.github.jaswantk917.chitthi.classify.SenderId
 import io.github.jaswantk917.chitthi.model.Category
 import io.github.jaswantk917.chitthi.model.Message
 import io.github.jaswantk917.chitthi.model.SenderInfo
@@ -146,7 +147,7 @@ object Notifier {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Message not sent")
             .setContentText("To $address. Open Chitthi to try again.")
-            .setContentIntent(openIntent(context, "p:" + address.filter(Char::isDigit).takeLast(10)))
+            .setContentIntent(openIntent(context, SenderId.parse(address).key))
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(context).notify(("failed$address").hashCode(), notification)

@@ -15,6 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Palette as PaletteIcon
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -44,6 +46,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import io.github.jaswantk917.chitthi.ai.NanoStatus
 import io.github.jaswantk917.chitthi.data.Settings
+import io.github.jaswantk917.chitthi.ui.theme.Palette
 import io.github.jaswantk917.chitthi.ui.util.Haptic
 import io.github.jaswantk917.chitthi.ui.util.rememberHaptics
 import kotlinx.coroutines.launch
@@ -71,6 +74,26 @@ fun SettingsSheet(
             Text("Settings", style = MaterialTheme.typography.headlineMediumEmphasized)
             Spacer(Modifier.height(16.dp))
 
+            Section(Icons.Rounded.PaletteIcon, "Colours", "Chitthi's own purple, or Material You from your wallpaper") {}
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+            ) {
+                Palette.entries.forEachIndexed { i, palette ->
+                    ToggleButton(
+                        checked = settings.palette == palette,
+                        onCheckedChange = { haptics.play(Haptic.Segment); onChange { it.copy(palette = palette) } },
+                        shapes = if (i == 0) ButtonGroupDefaults.connectedLeadingButtonShapes() else ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                        modifier = Modifier.weight(1f),
+                    ) { Text(if (palette == Palette.Chitthi) "Chitthi" else "Wallpaper", maxLines = 1) }
+                }
+            }
+            Section(Icons.Rounded.DarkMode, "AMOLED black", "Pure black backgrounds in dark mode") {
+                Switch(settings.amoled, onCheckedChange = { on ->
+                    haptics.play(if (on) Haptic.ToggleOn else Haptic.ToggleOff)
+                    onChange { it.copy(amoled = on) }
+                })
+            }
             Section(Icons.Rounded.Sms, "SMS app", if (isDefault) "Chitthi is your SMS app" else "Reading only. Another app handles new messages.") {
                 if (isDefault) Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
                 else Button(onClick = onMakeDefault) { Text("Switch") }

@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -97,7 +98,7 @@ class MainActivity : ComponentActivity() {
         handle(intent)
         setContent {
             val settings by app.prefs.settings.collectAsState()
-            ChitthiTheme { CompositionLocalProvider(LocalBlur provides settings.blur) { Root() } }
+            ChitthiTheme(settings.palette, settings.amoled) { CompositionLocalProvider(LocalBlur provides settings.blur) { Root() } }
         }
     }
 
@@ -286,8 +287,10 @@ class MainActivity : ComponentActivity() {
                         slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -(it * PARALLAX).toInt() }
                     } else {
                         slideInHorizontally(slide) { -(it * PARALLAX).toInt() } togetherWith slideOutHorizontally(slide) { it }
-                    }.apply { targetContentZIndex = if (popping) -1f else 1f }
+                    }.apply { targetContentZIndex = if (popping) -1f else 1f } using null
                 },
+                // the empty state is 0×0; a wrapping container would grow a clip out of the corner
+                modifier = Modifier.fillMaxSize(),
                 label = "routes",
             ) { route ->
                 if (route == null) return@AnimatedContent
@@ -355,14 +358,23 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         var sheet by remember { mutableStateOf(false) }
-        val sender = remember(version, route.key) { inbox.sender(route.key) ?: route.fallback }
+        val sender = remember(version, route.key) {
+            inbox.sender(route.key) ?: route.fallback
+                ?: route.key.takeIf { it.startsWith("p:") || it.startsWith("c:") }?.let { inbox.senderForNumber(it.substring(2)) }
+        }
         val messages = remember(version, route.key) { inbox.messagesOf(route.key) }
         LaunchedEffect(version, route.key) {
             Notifier.cancel(context, route.key)
             if (inbox.hasUnread(route.key)) inbox.markRead(route.key)
         }
         if (sender == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (inbox.state.collectAsState().value.loaded) {
+                    Text("This conversation is gone", style = MaterialTheme.typography.titleMedium)
+                } else {
+                    LoadingIndicator()
+                }
+            }
             return
         }
         val actions = remember(sender) {

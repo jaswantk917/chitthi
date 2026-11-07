@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -193,8 +195,14 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
             onTitleHeight = { titleHeight = it.toFloat() },
             modifier = Modifier.onSizeChanged { headerHeight = with(density) { it.height.toDp() } },
         )
-        // keeps the clock readable once the header has slid up beneath it
-        Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(MaterialTheme.colorScheme.surface))
+        // the list blurs right up under the clock; a soft fade keeps the clock readable
+        val surface = MaterialTheme.colorScheme.surface
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsTopHeight(WindowInsets.statusBars)
+                .background(Brush.verticalGradient(0f to surface.copy(alpha = 0.75f), 1f to surface.copy(alpha = 0f))),
+        )
 
         ExtendedFloatingActionButton(
             onClick = { haptics.play(Haptic.Tap); actions.newChat() },
@@ -240,7 +248,7 @@ private fun Header(
         modifier
             .fillMaxWidth()
             .graphicsLayer { translationY = -collapse() }
-            .background(Brush.verticalGradient(0f to surface, 0.7f to surface.copy(alpha = 0.9f), 1f to surface.copy(alpha = 0f)))
+            .background(Brush.verticalGradient(0f to surface.copy(alpha = 0.8f), 0.65f to surface.copy(alpha = 0.6f), 1f to surface.copy(alpha = 0f)))
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(bottom = 10.dp),
     ) {
@@ -281,11 +289,16 @@ private fun Header(
                 modifier = Modifier.size(48.dp),
             ) { Icon(Icons.Rounded.Settings, "Settings") }
         }
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        val chips = rememberLazyListState()
+        // follow the pager, keeping one neighbour of context to the left
+        LaunchedEffect(selected) { chips.animateScrollToItem((selected - 1).coerceAtLeast(0)) }
+        LazyRow(
+            state = chips,
+            contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            categories.forEachIndexed { i, category ->
+            itemsIndexed(categories) { i, category ->
                 ToggleButton(
                     checked = i == selected,
                     onCheckedChange = { onSelect(i) },

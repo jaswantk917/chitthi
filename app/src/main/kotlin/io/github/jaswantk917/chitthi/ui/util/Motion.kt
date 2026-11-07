@@ -61,15 +61,19 @@ fun Modifier.arrive(key: Any, index: Int, seen: MutableSet<Any>): Modifier {
  * Only Android 13+ can vary the radius; older versions draw it sharp.
  */
 @Composable
-fun Modifier.edgeBlur(top: Dp, bottom: Dp): Modifier = if (LocalBlur.current) progressiveBlur(top, bottom) else this
+fun Modifier.edgeBlur(top: Dp, bottom: Dp): Modifier = edgeBlur({ top }, bottom)
+
+/** [top] is read while drawing, so a collapsing header moves the blur without recomposing */
+@Composable
+fun Modifier.edgeBlur(top: () -> Dp, bottom: Dp): Modifier = if (LocalBlur.current) progressiveBlur(top, bottom) else this
 
 /** whether the phone's GPU gets the progressive blur; see Settings.blur */
 val LocalBlur = staticCompositionLocalOf { false }
 
-private fun Modifier.progressiveBlur(top: Dp, bottom: Dp) = blur {
+private fun Modifier.progressiveBlur(top: () -> Dp, bottom: Dp) = blur {
     val height = size.height.value
     if (height > 0f) {
-        val topEnd = (top.value / height).coerceIn(0.01f, 0.4f)
+        val topEnd = (top().value / height).coerceIn(0.01f, 0.4f)
         val bottomStart = (1f - bottom.value / height).coerceIn(0.6f, 0.99f)
         blurRadiusSpec = BlurRadiusSpec.verticalGradient(
             listOf(

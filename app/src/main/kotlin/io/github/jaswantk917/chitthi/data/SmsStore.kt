@@ -1,5 +1,6 @@
 package io.github.jaswantk917.chitthi.data
 
+import android.app.role.RoleManager
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
@@ -17,7 +18,9 @@ object SmsStore {
     private val MMS_PART_URI: Uri = Uri.parse("content://mms/part")
     private const val MMS_FROM = 137
 
-    fun isDefault(context: Context): Boolean = Sms.getDefaultSmsPackage(context) == context.packageName
+    /** the role is the source of truth; Sms.getDefaultSmsPackage can lag behind or miss a role change */
+    fun isDefault(context: Context): Boolean =
+        context.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_SMS)
 
     fun loadSms(context: Context, threadIds: Collection<Long>? = null): List<Message> {
         val selection = threadIds?.let { "${Sms.THREAD_ID} IN (${it.joinToString(",")})" }

@@ -70,6 +70,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -129,6 +136,17 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
     val listStates = categories.map { rememberLazyListState() }
     val density = LocalDensity.current
     var headerHeight by remember { mutableStateOf(160.dp) }
+    // the title scrolls away and comes back on any scroll up; the chips stay
+    var titleHeight by remember { mutableFloatStateOf(0f) }
+    var collapse by remember { mutableFloatStateOf(0f) }
+    val collapser = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                collapse = (collapse - available.y).coerceIn(0f, titleHeight)
+                return Offset.Zero
+            }
+        }
+    }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     val seen = remember { HashSet<Any>() }
 
@@ -141,7 +159,7 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
         derivedStateOf { currentList.firstVisibleItemIndex == 0 || !currentList.lastScrolledForward }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).nestedScroll(collapser)) {
         if (!state.loaded) {
             Sorting(state.sorting)
         } else {
@@ -149,7 +167,7 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
             HorizontalPager(
                 state = pager,
                 beyondViewportPageCount = 1,
-                modifier = Modifier.fillMaxSize().edgeBlur(top = headerHeight, bottom = navBottom + 24.dp),
+                modifier = Modifier.fillMaxSize().edgeBlur(top = { headerHeight - with(density) { collapse.toDp() } }, bottom = navBottom + 24.dp),
             ) { page ->
                 val category = categories[page]
                 CategoryPage(
@@ -171,8 +189,12 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
             unread = categories.map { c -> state.conversations[c].orEmpty().sumOf { it.unread } },
             onSelect = { scope.launch { pager.animateScrollToPage(it) } },
             actions = actions,
+            collapse = { collapse },
+            onTitleHeight = { titleHeight = it.toFloat() },
             modifier = Modifier.onSizeChanged { headerHeight = with(density) { it.height.toDp() } },
         )
+        // keeps the clock readable once the header has slid up beneath it
+        Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(MaterialTheme.colorScheme.surface))
 
         ExtendedFloatingActionButton(
             onClick = { haptics.play(Haptic.Tap); actions.newChat() },
@@ -208,6 +230,8 @@ private fun Header(
     unread: List<Int>,
     onSelect: (Int) -> Unit,
     actions: InboxActions,
+    collapse: () -> Float,
+    onTitleHeight: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
@@ -215,12 +239,23 @@ private fun Header(
     Column(
         modifier
             .fillMaxWidth()
+            .graphicsLayer { translationY = -collapse() }
             .background(Brush.verticalGradient(0f to surface, 0.7f to surface.copy(alpha = 0.9f), 1f to surface.copy(alpha = 0f)))
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(bottom = 10.dp),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
+            Modifier
+                .onSizeChanged { onTitleHeight(it.height) }
+                .graphicsLayer {
+                    val p = if (size.height > 0f) collapse() / size.height else 0f
+                    alpha = 1f - p
+                    scaleX = 1f - 0.08f * p
+                    scaleY = 1f - 0.08f * p
+                    transformOrigin = TransformOrigin(0f, 1f)
+                }
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {

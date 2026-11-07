@@ -1,0 +1,45 @@
+[versions]
+agp = "9.4.1"
+kotlin = "2.3.21"
+# the beta BOM: Compose UI 1.13 (progressive blur) + Material 3 1.5 (the full Expressive set)
+composeBom = "2026.10.00"
+activityCompose = "1.11.0"
+coreKtx = "1.17.0"
+lifecycle = "2.9.4"
+coil = "2.7.0"
+graphicsShapes = "1.0.1"
+mlkitGenaiPrompt = "1.0.0-beta4"
+work = "2.10.5"
+kotlinxCoroutines = "1.11.0"
+junit = "4.13.2"
+orgJson = "20250517"
+java = "21"
+minSdk = "29"
+targetSdk = "36"
+compileSdk = "37"
+compileSdkMinor = "1"
+
+[libraries]
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+compose-bom = { module = "androidx.compose:compose-bom-beta", version.ref = "composeBom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+graphics-shapes = { module = "androidx.graphics:graphics-shapes", version.ref = "graphicsShapes" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkitGenaiPrompt" }
+work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+junit = { module = "junit:junit", version.ref = "junit" }
+# the real org.json for unit tests; android.jar only has stubs
+org-json = { module = "org.json:json", version.ref = "orgJson" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

@@ -120,6 +120,8 @@ import kotlinx.coroutines.launch
 
 interface InboxActions {
     fun open(conversation: Conversation)
+    /** a person's face: their contact, or saving the number as one */
+    fun contact(conversation: Conversation)
     fun newChat()
     fun search()
     fun settings()
@@ -151,8 +153,24 @@ fun InboxScreen(
     // the title scrolls away and comes back on any scroll up; the chips stay
     var titleHeight by remember { mutableFloatStateOf(0f) }
     var collapse by remember { mutableFloatStateOf(0f) }
+    // the FAB follows the way you've kept scrolling, not every twitch: catching a fling starts a
+    // drag with no slop, so a finger's wobble scrolls back a pixel or two
+    var fabOpen by remember { mutableStateOf(true) }
+    val fabSlop = with(density) { 48.dp.toPx() }
     val collapser = remember {
         object : NestedScrollConnection {
+            private var run = 0f
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                val dy = consumed.y
+                if (dy != 0f) {
+                    if (dy > 0f != run > 0f) run = 0f
+                    run += dy
+                    if (run > fabSlop) fabOpen = true else if (run < -fabSlop) fabOpen = false
+                }
+                return Offset.Zero
+            }
+
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 collapse = (collapse - available.y).coerceIn(0f, titleHeight)
                 return Offset.Zero
@@ -178,6 +196,7 @@ fun InboxScreen(
     val reveal = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
     LaunchedEffect(pager) {
         snapshotFlow { pager.settledPage }.collect { page ->
+            fabOpen = true
             val list = listStates[page]
             if (list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < collapse) {
                 animate(collapse, list.firstVisibleItemScrollOffset.toFloat(), animationSpec = reveal) { v, _ -> collapse = v }
@@ -187,7 +206,7 @@ fun InboxScreen(
 
     val currentList = listStates[pager.currentPage]
     val expandedFab by remember(currentList) {
-        derivedStateOf { currentList.firstVisibleItemIndex == 0 || !currentList.lastScrolledForward }
+        derivedStateOf { fabOpen || currentList.firstVisibleItemIndex == 0 }
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).nestedScroll(collapser)) {
@@ -411,6 +430,7 @@ private fun CategoryPage(
                 scheduled = conversation.senderKey in scheduledKeys,
                 onClick = { actions.open(conversation) },
                 onLongPress = { haptics.play(Haptic.Hold); onLongPress(conversation) },
+                onFace = { haptics.play(Haptic.Tap); actions.contact(conversation) },
                 modifier = Modifier.animateItem(),
             )
         }
@@ -423,6 +443,7 @@ private fun ConversationRow(
     scheduled: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    onFace: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -437,7 +458,14 @@ private fun ConversationRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Box {
+        val face = remember { MutableInteractionSource() }
+        val person = conversation.sender.key.startsWith("p:")
+        Box(
+            Modifier
+                .pressScale(face)
+                .clip(CircleShape)
+                .combinedClickable(interactionSource = face, indication = null, enabled = person, onClick = onFace),
+        ) {
             Avatar(conversation.sender, size = 52.dp)
             if (conversation.pinned) {
                 Icon(

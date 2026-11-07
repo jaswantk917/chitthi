@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.ContactsContract
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -162,6 +163,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** a saved person opens in Contacts; a stranger's number opens "new contact, or add to someone" */
+    private fun showContact(sender: SenderInfo) {
+        if (!sender.key.startsWith("p:")) return
+        val number = sender.replyAddresses.firstOrNull() ?: return
+        val saved = if (sender.isContact) {
+            runCatching {
+                contentResolver.query(
+                    Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number)),
+                    arrayOf(ContactsContract.PhoneLookup._ID, ContactsContract.PhoneLookup.LOOKUP_KEY), null, null, null,
+                )?.use { c -> if (c.moveToFirst()) ContactsContract.Contacts.getLookupUri(c.getLong(0), c.getString(1)) else null }
+            }.getOrNull()
+        } else null
+        startActivity(
+            if (saved != null) Intent(Intent.ACTION_VIEW, saved)
+            else Intent(Intent.ACTION_INSERT_OR_EDIT).setType(ContactsContract.Contacts.CONTENT_ITEM_TYPE).putExtra(ContactsContract.Intents.Insert.PHONE, number),
+        )
+    }
+
     private fun hasSmsPermission() = checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
 
     @Composable
@@ -218,6 +237,7 @@ class MainActivity : ComponentActivity() {
         val inboxActions = remember {
             object : InboxActions {
                 override fun open(conversation: Conversation) = push(Route.Thread(conversation.senderKey, conversation.sender))
+                override fun contact(conversation: Conversation) = showContact(conversation.sender)
                 override fun newChat() = push(Route.NewChat())
                 override fun search() = push(Route.Search)
                 override fun settings() { showSettings = true }
@@ -405,6 +425,7 @@ class MainActivity : ComponentActivity() {
                     sender.replyAddresses.firstOrNull()?.let { startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$it"))) }
                 }
                 override fun more() { sheet = true }
+                override fun contact() = showContact(sender)
                 override suspend fun smartReplies(chat: List<Pair<Boolean, String>>): List<String> {
                     val personal = sender.key.startsWith("p:") || sender.key.startsWith("t:")
                     if (!personal || !app.prefs.settings.value.useNano || !inbox.nano.isReady()) return emptyList()

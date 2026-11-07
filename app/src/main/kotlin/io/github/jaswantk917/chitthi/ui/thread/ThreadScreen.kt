@@ -135,6 +135,7 @@ interface ThreadActions {
     suspend fun delete(message: Message): Boolean
     fun call()
     fun more()
+    fun contact()
     suspend fun smartReplies(chat: List<Pair<Boolean, String>>): List<String>
     fun schedule(text: String, at: Long)
     fun sendNow(item: Scheduled)
@@ -302,12 +303,24 @@ private fun TopBar(sender: SenderInfo, actions: ThreadActions, modifier: Modifie
             interactionSource = press1,
         ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
         Spacer(Modifier.width(8.dp))
-        Avatar(sender, size = 42.dp)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(sender.title, style = MaterialTheme.typography.titleLargeEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            sender.subtitle?.let {
-                Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        // the face and name open the contact, or save the number as one
+        val face = remember { MutableInteractionSource() }
+        val person = sender.key.startsWith("p:")
+        Row(
+            Modifier
+                .weight(1f)
+                .pressScale(face, 0.97f)
+                .clip(RoundedCornerShape(24.dp))
+                .combinedClickable(interactionSource = face, indication = null, enabled = person, onClick = { haptics.play(Haptic.Tap); actions.contact() }),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Avatar(sender, size = 42.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(sender.title, style = MaterialTheme.typography.titleLargeEmphasized, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                sender.subtitle?.let {
+                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
             }
         }
         if (sender.key.startsWith("p:")) {

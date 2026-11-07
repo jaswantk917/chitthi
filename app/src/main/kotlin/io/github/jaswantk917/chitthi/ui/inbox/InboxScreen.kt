@@ -109,7 +109,6 @@ import io.github.jaswantk917.chitthi.ui.components.Avatar
 import io.github.jaswantk917.chitthi.ui.components.TagRow
 import io.github.jaswantk917.chitthi.ui.util.onLongPress
 import io.github.jaswantk917.chitthi.ui.util.Haptic
-import io.github.jaswantk917.chitthi.ui.util.arrive
 import io.github.jaswantk917.chitthi.ui.util.edgeBlur
 import io.github.jaswantk917.chitthi.ui.util.pressScale
 import io.github.jaswantk917.chitthi.ui.util.rememberHaptics
@@ -161,7 +160,6 @@ fun InboxScreen(
         }
     }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
-    val seen = remember { HashSet<Any>() }
 
     LaunchedEffect(pager) {
         snapshotFlow { pager.currentPage }.distinctUntilChanged().drop(1).collect { haptics.play(Haptic.Segment) }
@@ -210,7 +208,6 @@ fun InboxScreen(
                     showDefaultBanner = !state.isDefault && page == 0,
                     listState = listStates[page],
                     contentPadding = PaddingValues(top = headerHeight + 4.dp, bottom = navBottom + 112.dp),
-                    seen = seen,
                     scheduledKeys = scheduledKeys,
                     actions = actions,
                     onLongPress = { menuFor = it },
@@ -389,7 +386,6 @@ private fun CategoryPage(
     showDefaultBanner: Boolean,
     listState: LazyListState,
     contentPadding: PaddingValues,
-    seen: MutableSet<Any>,
     scheduledKeys: Set<String>,
     actions: InboxActions,
     onLongPress: (Conversation) -> Unit,
@@ -409,14 +405,13 @@ private fun CategoryPage(
             item(key = "empty") { Empty(category, Modifier.animateItem()) }
         }
         items(conversations, key = { it.senderKey + "|" + it.category }) { conversation ->
-            val index = conversations.indexOf(conversation)
             val haptics = rememberHaptics()
             ConversationRow(
                 conversation,
                 scheduled = conversation.senderKey in scheduledKeys,
                 onClick = { actions.open(conversation) },
                 onLongPress = { haptics.play(Haptic.Hold); onLongPress(conversation) },
-                modifier = Modifier.animateItem().arrive(conversation.senderKey + category, index, seen),
+                modifier = Modifier.animateItem(),
             )
         }
     }

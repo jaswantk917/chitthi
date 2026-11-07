@@ -1,5 +1,7 @@
 package io.github.jaswantk917.chitthi.ui.theme
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalContentColor
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -148,6 +150,8 @@ fun ChitthiTheme(palette: Palette = Palette.Chitthi, amoled: Boolean = false, co
         motionScheme = MotionScheme.expressive(),
         shapes = AppShapes,
         typography = AppTypography,
-        content = content,
-    )
+    ) {
+        // screens draw on plain backgrounds, not Surfaces, so bare Text would otherwise fall back to black
+        CompositionLocalProvider(LocalContentColor provides colorScheme.onSurface, content = content)
+    }
 }

@@ -46,10 +46,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.MarkEmailRead
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -64,11 +62,8 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -167,7 +162,6 @@ fun InboxScreen(state: InboxState, actions: InboxActions, snackbar: SnackbarHost
                     seen = seen,
                     actions = actions,
                     onLongPress = { menuFor = it },
-                    snackbar = snackbar,
                 )
             }
         }
@@ -295,7 +289,6 @@ private fun CategoryPage(
     seen: MutableSet<Any>,
     actions: InboxActions,
     onLongPress: (Conversation) -> Unit,
-    snackbar: SnackbarHostState,
 ) {
     LazyColumn(state = listState, contentPadding = contentPadding, modifier = Modifier.fillMaxSize()) {
         if (freshOtp != null) {
@@ -318,11 +311,11 @@ private fun CategoryPage(
         }
         items(conversations, key = { it.senderKey + "|" + it.category }) { conversation ->
             val index = conversations.indexOf(conversation)
-            SwipeableRow(
-                conversation = conversation,
-                actions = actions,
-                onLongPress = onLongPress,
-                snackbar = snackbar,
+            val haptics = rememberHaptics()
+            ConversationRow(
+                conversation,
+                onClick = { actions.open(conversation) },
+                onLongPress = { haptics.play(Haptic.Hold); onLongPress(conversation) },
                 modifier = Modifier.animateItem().arrive(conversation.senderKey + category, index, seen),
             )
         }
@@ -330,78 +323,12 @@ private fun CategoryPage(
 }
 
 @Composable
-private fun SwipeableRow(
-    conversation: Conversation,
-    actions: InboxActions,
-    onLongPress: (Conversation) -> Unit,
-    snackbar: SnackbarHostState,
-    modifier: Modifier = Modifier,
-) {
-    val haptics = rememberHaptics()
-    val scope = rememberCoroutineScope()
-    val swipe = rememberSwipeToDismissBoxState()
-    LaunchedEffect(swipe) {
-        snapshotFlow { swipe.targetValue }.drop(1).collect {
-            haptics.play(if (it == SwipeToDismissBoxValue.Settled) Haptic.Tap else Haptic.Threshold)
-        }
-    }
-    SwipeToDismissBox(
-        state = swipe,
-        modifier = modifier,
-        backgroundContent = { SwipeBackground(swipe.dismissDirection, swipe.progress) },
-        onDismiss = { direction ->
-            when (direction) {
-                SwipeToDismissBoxValue.StartToEnd -> scope.launch {
-                    actions.markRead(conversation)
-                    swipe.reset()
-                }
-                SwipeToDismissBoxValue.EndToStart -> scope.launch {
-                    if (actions.delete(conversation)) {
-                        haptics.play(Haptic.Delete)
-                    } else {
-                        haptics.play(Haptic.Error)
-                        swipe.reset()
-                        snackbar.showSnackbar("Make Chitthi your SMS app to delete")
-                    }
-                }
-                SwipeToDismissBoxValue.Settled -> Unit
-            }
-            Unit
-        },
-    ) {
-        ConversationRow(conversation, onClick = { actions.open(conversation) }, onLongPress = { haptics.play(Haptic.Hold); onLongPress(conversation) })
-    }
-}
-
-@Composable
-private fun SwipeBackground(direction: SwipeToDismissBoxValue, progress: Float) {
-    val scheme = MaterialTheme.colorScheme
-    val (container, content, icon, alignment) = when (direction) {
-        SwipeToDismissBoxValue.EndToStart -> Quad(scheme.errorContainer, scheme.onErrorContainer, Icons.Rounded.Delete, Alignment.CenterEnd)
-        else -> Quad(scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.Rounded.MarkEmailRead, Alignment.CenterStart)
-    }
-    val iconScale by animateFloatAsState(
-        if (progress > 0.35f) 1.25f else 0.8f,
-        spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium),
-        label = "swipeIcon",
-    )
-    Box(
-        Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 2.dp).clip(RoundedCornerShape(28.dp)).background(container),
-        contentAlignment = alignment,
-    ) {
-        Icon(icon, null, tint = content, modifier = Modifier.padding(horizontal = 28.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale })
-    }
-}
-
-private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
-
-@Composable
-private fun ConversationRow(conversation: Conversation, onClick: () -> Unit, onLongPress: () -> Unit) {
+private fun ConversationRow(conversation: Conversation, onClick: () -> Unit, onLongPress: () -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
     val unread = conversation.unread > 0
     val scheme = MaterialTheme.colorScheme
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .background(scheme.surface)
             .pressScale(interaction)

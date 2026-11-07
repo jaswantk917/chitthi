@@ -14,14 +14,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -46,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -84,6 +81,10 @@ sealed interface Route {
     data object Search : Route
     data class NewChat(val text: String = "") : Route
 }
+
+private const val PAGE_STIFFNESS = 520f
+private const val PARALLAX = 0.25f
+private const val SCRIM = 0.32f
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as ChitthiApp
@@ -234,7 +235,7 @@ class MainActivity : ComponentActivity() {
 
         // the inbox stays composed underneath, so its tabs and scroll survive a trip into a chat
         val covered = stack.isNotEmpty()
-        val depth by animateFloatAsState(if (covered) 1f else 0f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow), label = "depth")
+        val depth by animateFloatAsState(if (covered) 1f else 0f, spring(dampingRatio = 1f, stiffness = PAGE_STIFFNESS), label = "depth")
         var backProgress by remember { mutableFloatStateOf(0f) }
         var leaving by remember { mutableStateOf<Route?>(null) }
 
@@ -260,12 +261,13 @@ class MainActivity : ComponentActivity() {
 
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
             Box(
-                Modifier.fillMaxSize().graphicsLayer {
-                    val d = depth * (1f - backProgress)
-                    scaleX = 1f - 0.06f * d
-                    scaleY = 1f - 0.06f * d
-                    alpha = 1f - 0.4f * d
-                },
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = -size.width * PARALLAX * depth * (1f - backProgress) }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(Color.Black.copy(alpha = SCRIM * depth * (1f - backProgress)))
+                    },
             ) {
                 InboxScreen(state, inboxActions, snackbar)
             }
@@ -278,14 +280,13 @@ class MainActivity : ComponentActivity() {
             AnimatedContent(
                 targetState = stack.lastOrNull(),
                 transitionSpec = {
-                    val slide = spring<androidx.compose.ui.unit.IntOffset>(dampingRatio = 0.82f, stiffness = 420f)
+                    // the Pixel's own page motion: a full-width slide over a parallaxed, dimmed page
+                    val slide = spring<IntOffset>(dampingRatio = 1f, stiffness = PAGE_STIFFNESS)
                     if (!popping) {
-                        (slideInHorizontally(slide) { it / 3 } + fadeIn(tween(200)) + scaleIn(initialScale = 0.96f)) togetherWith
-                            (fadeOut(tween(160)) + scaleOut(targetScale = 0.94f))
+                        slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -(it * PARALLAX).toInt() }
                     } else {
-                        (fadeIn(tween(220)) + scaleIn(initialScale = 0.96f)) togetherWith
-                            (slideOutHorizontally(slide) { it / 3 } + fadeOut(tween(200)) + scaleOut(targetScale = 0.9f))
-                    }
+                        slideInHorizontally(slide) { -(it * PARALLAX).toInt() } togetherWith slideOutHorizontally(slide) { it }
+                    }.apply { targetContentZIndex = if (popping) -1f else 1f }
                 },
                 label = "routes",
             ) { route ->

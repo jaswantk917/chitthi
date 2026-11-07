@@ -17,6 +17,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- scheduled messages: granted at install from 13 on; 10 to 12 need the older one -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".ChitthiApp"
@@ -93,6 +97,19 @@
         <receiver
             android:name=".send.SmsSentReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".send.ScheduledSendReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".send.ScheduleRearmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".notify.NotificationActionReceiver"

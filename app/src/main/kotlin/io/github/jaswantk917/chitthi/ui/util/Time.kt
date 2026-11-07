@@ -45,3 +45,17 @@ fun dayLabel(millis: Long): String {
 
 fun sameDay(a: Long, b: Long): Boolean =
     Instant.ofEpochMilli(a).atZone(zone).toLocalDate() == Instant.ofEpochMilli(b).atZone(zone).toLocalDate()
+
+private val weekdayDayMonth = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
+
+/** when something later happens: "today, 6:00 pm", "tomorrow, 8:00 am", "Tue 12 Nov, 9:00 am" */
+fun laterLabel(millis: Long, now: Long = System.currentTimeMillis()): String {
+    val then = Instant.ofEpochMilli(millis).atZone(zone)
+    val days = ChronoUnit.DAYS.between(Instant.ofEpochMilli(now).atZone(zone).toLocalDate(), then.toLocalDate())
+    val time = then.format(clock).lowercase()
+    return when (days) {
+        0L -> "today, $time"
+        1L -> "tomorrow, $time"
+        else -> "${then.format(weekdayDayMonth)}, $time"
+    }
+}

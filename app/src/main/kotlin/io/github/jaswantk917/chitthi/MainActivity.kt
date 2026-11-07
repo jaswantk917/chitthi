@@ -1,5 +1,8 @@
 package io.github.jaswantk917.chitthi
 
+import io.github.jaswantk917.chitthi.send.Scheduler
+import io.github.jaswantk917.chitthi.model.Scheduled
+import androidx.compose.runtime.produceState
 import android.Manifest
 import android.app.role.RoleManager
 import android.content.Intent
@@ -377,6 +380,10 @@ class MainActivity : ComponentActivity() {
             }
             return
         }
+        val scheduleTick by Scheduler.changes.collectAsState()
+        val scheduled by produceState(emptyList<Scheduled>(), scheduleTick, sender.key) {
+            value = withContext(Dispatchers.IO) { Scheduler.pending(sender.key) }
+        }
         val actions = remember(sender) {
             object : ThreadActions {
                 override fun back() = pop()
@@ -399,9 +406,21 @@ class MainActivity : ComponentActivity() {
                     if (!personal || !app.prefs.settings.value.useNano || !inbox.nano.isReady()) return emptyList()
                     return inbox.nano.smartReplies(chat)
                 }
+                override fun schedule(text: String, at: Long) {
+                    scope.launch(Dispatchers.IO) { Scheduler.schedule(context, sender.key, sender.replyAddresses, text, at) }
+                }
+                override fun sendNow(item: Scheduled) {
+                    scope.launch(Dispatchers.IO) { Scheduler.sendNow(context, item) }
+                }
+                override fun reschedule(item: Scheduled, at: Long) {
+                    scope.launch(Dispatchers.IO) { Scheduler.reschedule(context, item, at) }
+                }
+                override fun cancel(item: Scheduled) {
+                    scope.launch(Dispatchers.IO) { Scheduler.cancel(context, item) }
+                }
             }
         }
-        ThreadScreen(sender, messages, inbox::verdict, route.text, actions)
+        ThreadScreen(sender, messages, scheduled, inbox::verdict, route.text, actions)
         if (sheet) {
             val latest = messages.lastOrNull()
             ConversationActionsSheet(

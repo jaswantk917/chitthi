@@ -2,16 +2,18 @@ package io.github.jaswantk917.chitthi.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import io.github.jaswantk917.chitthi.model.Category
+import io.github.jaswantk917.chitthi.model.Scheduled
 
 /**
  * What Chitthi knows on top of the system's SMS store: Gemini Nano's second opinions, the user's
  * own "move to" choices, pins, brand names guessed for unknown headers, and read marks for when
- * Chitthi isn't the default app and so can't write the system's read flag.
+ * Chitthi isn't the default app and so can't write the system's read flag, and messages scheduled to send later.
  */
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "chitthi.db", null, 1) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "chitthi.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE nano_verdict (msg_key TEXT PRIMARY KEY, category INTEGER NOT NULL)")
@@ -19,9 +21,59 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "chitthi.db", nul
         db.execSQL("CREATE TABLE pinned (sender_key TEXT PRIMARY KEY, at INTEGER NOT NULL)")
         db.execSQL("CREATE TABLE brand_guess (header TEXT PRIMARY KEY, name TEXT, domain TEXT)")
         db.execSQL("CREATE TABLE read_mark (sender_key TEXT PRIMARY KEY, at INTEGER NOT NULL)")
+        createScheduled(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) createScheduled(db)
+    }
+
+    private fun createScheduled(db: SQLiteDatabase) {
+        // addresses are newline-joined; a phone number never holds one
+        db.execSQL(
+            "CREATE TABLE scheduled (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_key TEXT NOT NULL, " +
+                "addresses TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL)"
+        )
+    }
+
+    fun addScheduled(senderKey: String, addresses: List<String>, body: String, at: Long): Long =
+        writableDatabase.insert("scheduled", null, ContentValues().apply {
+            put("sender_key", senderKey)
+            put("addresses", addresses.joinToString("\n"))
+            put("body", body)
+            put("at", at)
+        })
+
+    fun setScheduledTime(id: Long, at: Long) {
+        writableDatabase.update("scheduled", ContentValues().apply { put("at", at) }, "id = ?", arrayOf(id.toString()))
+    }
+
+    /** every pending message, or one conversation's, soonest first */
+    fun scheduled(senderKey: String? = null): List<Scheduled> = readableDatabase.rawQuery(
+        "SELECT id, sender_key, addresses, body, at FROM scheduled" +
+            (if (senderKey != null) " WHERE sender_key = ?" else "") + " ORDER BY at",
+        senderKey?.let { arrayOf(it) },
+    ).use { c ->
+        buildList {
+            while (c.moveToNext()) add(c.toScheduled())
+        }
+    }
+
+    /** removes and returns it, so an alarm and a "send now" can't both send it */
+    fun takeScheduled(id: Long): Scheduled? {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val found = db.rawQuery("SELECT id, sender_key, addresses, body, at FROM scheduled WHERE id = ?", arrayOf(id.toString())).use { c ->
+                if (c.moveToFirst()) c.toScheduled() else null
+            }
+            if (found != null) db.delete("scheduled", "id = ?", arrayOf(id.toString()))
+            db.setTransactionSuccessful()
+            return found
+        } finally {
+            db.endTransaction()
+        }
+    }
 
     fun nanoVerdicts(): Map<String, Category> = readableDatabase
         .rawQuery("SELECT msg_key, category FROM nano_verdict", null).use { c ->
@@ -77,6 +129,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "chitthi.db", nul
     fun putReadMark(senderKey: String, at: Long) = upsert(
         "read_mark", ContentValues().apply { put("sender_key", senderKey); put("at", at) }
     )
+
+    private fun Cursor.toScheduled() = Scheduled(getLong(0), getString(1), getString(2).split('\n'), getString(3), getLong(4))
 
     private fun upsert(table: String, values: ContentValues) {
         writableDatabase.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_REPLACE)

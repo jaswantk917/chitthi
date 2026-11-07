@@ -71,3 +71,6 @@ data class Conversation(
     val unread: Int,
     val pinned: Boolean,
 )
+
+/** a message waiting for its time; [at] is millis */
+data class Scheduled(val id: Long, val senderKey: String, val addresses: List<String>, val body: String, val at: Long)

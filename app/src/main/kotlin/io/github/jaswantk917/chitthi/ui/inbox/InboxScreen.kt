@@ -1,5 +1,6 @@
 package io.github.jaswantk917.chitthi.ui.inbox
 
+import io.github.jaswantk917.chitthi.ui.components.pressMorph
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -59,7 +60,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -76,13 +76,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -111,6 +106,7 @@ import io.github.jaswantk917.chitthi.model.Conversation
 import io.github.jaswantk917.chitthi.notify.Clipboard
 import io.github.jaswantk917.chitthi.ui.components.Avatar
 import io.github.jaswantk917.chitthi.ui.components.TagRow
+import io.github.jaswantk917.chitthi.ui.util.onLongPress
 import io.github.jaswantk917.chitthi.ui.util.Haptic
 import io.github.jaswantk917.chitthi.ui.util.arrive
 import io.github.jaswantk917.chitthi.ui.util.edgeBlur
@@ -307,15 +303,19 @@ private fun Header(
                     )
                 }
             }
+            val press1 = remember { MutableInteractionSource() }
             FilledTonalIconButton(
                 onClick = { haptics.play(Haptic.Tap); actions.search() },
-                shapes = IconButtonDefaults.shapes(MaterialShapes.Cookie6Sided.toShape(), MaterialShapes.Cookie4Sided.toShape()),
+                shape = pressMorph(MaterialShapes.Cookie6Sided, MaterialShapes.Cookie4Sided, press1),
+                interactionSource = press1,
                 modifier = Modifier.size(48.dp),
             ) { Icon(Icons.Rounded.Search, "Search") }
             Spacer(Modifier.width(6.dp))
+            val press2 = remember { MutableInteractionSource() }
             FilledTonalIconButton(
                 onClick = { haptics.play(Haptic.Tap); actions.settings() },
-                shapes = IconButtonDefaults.shapes(MaterialShapes.Clover4Leaf.toShape(), MaterialShapes.Cookie4Sided.toShape()),
+                shape = pressMorph(MaterialShapes.Clover4Leaf, MaterialShapes.Cookie4Sided, press2),
+                interactionSource = press2,
                 modifier = Modifier.size(48.dp),
             ) { Icon(Icons.Rounded.Settings, "Settings") }
         }
@@ -369,27 +369,6 @@ private fun Header(
                     }
                 }
             }
-        }
-    }
-}
-
-/** a long press that wins over the button's own click, so letting go doesn't also toggle it */
-private fun Modifier.onLongPress(action: () -> Unit) = pointerInput(Unit) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        // completes when the finger lifts or drifts into a scroll; null means it was held
-        val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-            while (true) {
-                val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
-            }
-        }
-        if (ended == null) {
-            action()
-            do {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                event.changes.forEach { it.consume() }
-            } while (event.changes.any { it.pressed })
         }
     }
 }

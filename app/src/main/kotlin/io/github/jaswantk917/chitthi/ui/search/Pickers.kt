@@ -1,5 +1,6 @@
 package io.github.jaswantk917.chitthi.ui.search
 
+import io.github.jaswantk917.chitthi.ui.components.pressMorph
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -76,9 +76,11 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, placeholder: Str
         Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val press1 = remember { MutableInteractionSource() }
         FilledTonalIconButton(
             onClick = { haptics.play(Haptic.Tap); onBack() },
-            shapes = IconButtonDefaults.shapes(MaterialShapes.Cookie9Sided.toShape(), MaterialShapes.Cookie4Sided.toShape()),
+            shape = pressMorph(MaterialShapes.Cookie9Sided, MaterialShapes.Cookie4Sided, press1),
+            interactionSource = press1,
         ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
         Spacer(Modifier.width(8.dp))
         TextField(

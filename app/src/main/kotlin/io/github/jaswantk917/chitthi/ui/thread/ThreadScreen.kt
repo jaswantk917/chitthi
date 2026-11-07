@@ -1,5 +1,15 @@
 package io.github.jaswantk917.chitthi.ui.thread
 
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.navigationBarsPadding
+import io.github.jaswantk917.chitthi.model.Scheduled
+import io.github.jaswantk917.chitthi.ui.util.onLongPress
+import io.github.jaswantk917.chitthi.ui.util.laterLabel
+import io.github.jaswantk917.chitthi.ui.components.pressMorph
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -58,7 +68,6 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
@@ -127,6 +136,10 @@ interface ThreadActions {
     fun call()
     fun more()
     suspend fun smartReplies(chat: List<Pair<Boolean, String>>): List<String>
+    fun schedule(text: String, at: Long)
+    fun sendNow(item: Scheduled)
+    fun reschedule(item: Scheduled, at: Long)
+    fun cancel(item: Scheduled)
 }
 
 private sealed interface Item {
@@ -134,6 +147,9 @@ private sealed interface Item {
     data class Day(val label: String, override val key: String) : Item
     data class Bubble(val message: Message, val verdict: Verdict, val joinsAbove: Boolean, val joinsBelow: Boolean) : Item {
         override val key: String get() = message.key
+    }
+    data class Pending(val item: Scheduled) : Item {
+        override val key: String get() = "scheduled-${item.id}"
     }
 }
 
@@ -156,6 +172,7 @@ private fun rows(messages: List<Message>, verdict: (Message) -> Verdict): List<I
 fun ThreadScreen(
     sender: SenderInfo,
     messages: List<Message>,
+    scheduled: List<Scheduled>,
     verdict: (Message) -> Verdict,
     initialText: String,
     actions: ThreadActions,
@@ -169,6 +186,12 @@ fun ThreadScreen(
     var bottomHeight by remember { mutableStateOf(88.dp) }
     val initialKeys = remember(sender.key) { messages.map { it.key }.toHashSet() }
     val rows = remember(messages) { rows(messages, verdict) }
+    // newest-first like the rest of this reversed list, so the soonest sits just under the last message
+    val pending = remember(scheduled) { scheduled.sortedByDescending { it.at }.map { Item.Pending(it) } }
+    var draft by rememberSaveable(sender.key) { mutableStateOf(initialText) }
+    var sendLater by remember { mutableStateOf(false) }
+    var openPending by remember { mutableStateOf<Scheduled?>(null) }
+    var retime by remember { mutableStateOf<Scheduled?>(null) }
 
     val newest = messages.lastOrNull()
     LaunchedEffect(newest?.key) {
@@ -176,6 +199,11 @@ fun ThreadScreen(
             if (newest.incoming) haptics.play(Haptic.Arrive)
             list.animateScrollToItem(0)
         }
+    }
+    var pendingCount by remember { mutableIntStateOf(scheduled.size) }
+    LaunchedEffect(scheduled.size) {
+        if (scheduled.size > pendingCount) list.animateScrollToItem(0)
+        pendingCount = scheduled.size
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -185,8 +213,9 @@ fun ThreadScreen(
             contentPadding = PaddingValues(top = topHeight + 8.dp, bottom = bottomHeight + 8.dp, start = 12.dp, end = 12.dp),
             modifier = Modifier.fillMaxSize().edgeBlur(top = topHeight, bottom = bottomHeight),
         ) {
-            items(rows, key = { it.key }) { row ->
+            items(pending + rows, key = { it.key }) { row ->
                 when (row) {
+                    is Item.Pending -> PendingBubble(row.item, onClick = { openPending = row.item }, modifier = Modifier.animateItem())
                     is Item.Day -> DayChip(row.label, Modifier.animateItem())
                     is Item.Bubble -> Bubble(
                         row = row,
@@ -214,11 +243,43 @@ fun ThreadScreen(
         ) {
             SnackbarHost(snackbar)
             if (sender.canReply) {
-                Composer(sender, messages, initialText, actions)
+                Composer(sender, messages, draft, { draft = it }, onSendLater = { sendLater = true }, actions)
             } else {
                 NoReplies(sender)
             }
         }
+    }
+
+    if (sendLater) {
+        SendLaterSheet(
+            title = "Send later",
+            onPick = { at ->
+                actions.schedule(draft.trim(), at)
+                draft = ""
+                sendLater = false
+            },
+            onDismiss = { sendLater = false },
+        )
+    }
+    retime?.let { item ->
+        SendLaterSheet(
+            title = "Change time",
+            onPick = { at -> actions.reschedule(item, at); retime = null },
+            onDismiss = { retime = null },
+        )
+    }
+    openPending?.let { item ->
+        PendingSheet(
+            item = item,
+            onDismiss = { openPending = null },
+            onSendNow = { actions.sendNow(item) },
+            onChangeTime = { retime = item },
+            onEdit = {
+                draft = item.body
+                actions.cancel(item)
+            },
+            onDelete = { actions.cancel(item) },
+        )
     }
 }
 
@@ -234,9 +295,11 @@ private fun TopBar(sender: SenderInfo, actions: ThreadActions, modifier: Modifie
             .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val press1 = remember { MutableInteractionSource() }
         FilledTonalIconButton(
             onClick = { haptics.play(Haptic.Tap); actions.back() },
-            shapes = IconButtonDefaults.shapes(MaterialShapes.Cookie9Sided.toShape(), MaterialShapes.Cookie4Sided.toShape()),
+            shape = pressMorph(MaterialShapes.Cookie9Sided, MaterialShapes.Cookie4Sided, press1),
+            interactionSource = press1,
         ) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
         Spacer(Modifier.width(8.dp))
         Avatar(sender, size = 42.dp)
@@ -449,9 +512,15 @@ private fun annotated(
 }
 
 @Composable
-private fun Composer(sender: SenderInfo, messages: List<Message>, initialText: String, actions: ThreadActions) {
+private fun Composer(
+    sender: SenderInfo,
+    messages: List<Message>,
+    text: String,
+    onText: (String) -> Unit,
+    onSendLater: () -> Unit,
+    actions: ThreadActions,
+) {
     val haptics = rememberHaptics()
-    var text by rememberSaveable(sender.key) { mutableStateOf(initialText) }
     var suggestions by remember { mutableStateOf(emptyList<String>()) }
     val last = messages.lastOrNull()
     LaunchedEffect(last?.key) {
@@ -484,7 +553,7 @@ private fun Composer(sender: SenderInfo, messages: List<Message>, initialText: S
                     LaunchedEffect(suggestion) { kotlinx.coroutines.delay(i * 70L); shown = true }
                     val s by animateFloatAsState(if (shown) 1f else 0.6f, spring(dampingRatio = 0.5f), label = "chip")
                     SuggestionChip(
-                        onClick = { haptics.play(Haptic.Tap); text = suggestion },
+                        onClick = { haptics.play(Haptic.Tap); onText(suggestion) },
                         label = { Text(suggestion) },
                         shape = CircleShape,
                         modifier = Modifier.graphicsLayer { scaleX = s; scaleY = s; alpha = ((s - 0.6f) / 0.4f).coerceIn(0f, 1f) },
@@ -495,7 +564,7 @@ private fun Composer(sender: SenderInfo, messages: List<Message>, initialText: S
         Row(verticalAlignment = Alignment.Bottom) {
             TextField(
                 value = text,
-                onValueChange = { text = it },
+                onValueChange = onText,
                 placeholder = { Text("Message") },
                 shape = RoundedCornerShape(28.dp),
                 maxLines = 6,
@@ -511,15 +580,21 @@ private fun Composer(sender: SenderInfo, messages: List<Message>, initialText: S
             val canSend = text.isNotBlank()
             val turn by animateFloatAsState(if (canSend) 0f else -40f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium), label = "sendTurn")
             val grow by animateFloatAsState(if (canSend) 1f else 0.86f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium), label = "sendGrow")
+            val press2 = remember { MutableInteractionSource() }
             FilledIconButton(
                 onClick = {
                     haptics.play(Haptic.Send)
                     actions.send(text.trim())
-                    text = ""
+                    onText("")
                 },
                 enabled = canSend,
-                shapes = IconButtonDefaults.shapes(MaterialShapes.Cookie9Sided.toShape(), MaterialShapes.Cookie4Sided.toShape()),
-                modifier = Modifier.size(56.dp).graphicsLayer { scaleX = grow; scaleY = grow; rotationZ = turn },
+                shape = pressMorph(MaterialShapes.Cookie9Sided, MaterialShapes.Cookie4Sided, press2),
+                interactionSource = press2,
+                modifier = Modifier
+                    .size(56.dp)
+                    .graphicsLayer { scaleX = grow; scaleY = grow; rotationZ = turn }
+                    // hold to send later, like Messages
+                    .onLongPress { if (canSend) { haptics.play(Haptic.Hold); onSendLater() } },
             ) { Icon(Icons.AutoMirrored.Rounded.Send, "Send") }
         }
     }
@@ -538,6 +613,99 @@ private fun NoReplies(sender: SenderInfo) {
             Icon(Icons.Rounded.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(8.dp))
             Text("${sender.title} doesn't take replies", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** a scheduled message: on the sender's side like a sent one, quieter, with when it goes */
+@Composable
+private fun PendingBubble(item: Scheduled, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    val interaction = remember { MutableInteractionSource() }
+    val entrance = remember(item.id) { Animatable(0f) }
+    LaunchedEffect(item.id) { entrance.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow)) }
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .graphicsLayer {
+                val p = entrance.value
+                alpha = p.coerceIn(0f, 1f)
+                scaleX = 0.7f + 0.3f * p
+                scaleY = 0.7f + 0.3f * p
+                transformOrigin = TransformOrigin(1f, 1f)
+            },
+        horizontalAlignment = Alignment.End,
+    ) {
+        Text(
+            item.body,
+            style = MaterialTheme.typography.bodyLarge,
+            color = scheme.onPrimaryContainer,
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .pressScale(interaction, 0.97f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(scheme.primaryContainer)
+                .clickable(interactionSource = interaction, indication = null) { haptics.play(Haptic.Tap); onClick() }
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        )
+        Row(Modifier.padding(top = 4.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Schedule, null, tint = scheme.primary, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Sends ${laterLabel(item.at)}", style = MaterialTheme.typography.labelMedium, color = scheme.primary)
+        }
+    }
+}
+
+@Composable
+private fun PendingSheet(
+    item: Scheduled,
+    onDismiss: () -> Unit,
+    onSendNow: () -> Unit,
+    onChangeTime: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val scope = rememberCoroutineScope()
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    fun close(then: () -> Unit) {
+        scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss(); then() }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding().padding(bottom = 20.dp)) {
+            Text(
+                "Sends ${laterLabel(item.at)}",
+                style = MaterialTheme.typography.headlineSmallEmphasized,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+            Text(
+                item.body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 16.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                SheetRow(Icons.AutoMirrored.Rounded.Send, "Send now", null, 0, 4, onClick = {
+                    haptics.play(Haptic.Send)
+                    close(onSendNow)
+                })
+                SheetRow(Icons.Rounded.Schedule, "Change time", null, 1, 4, onClick = {
+                    haptics.play(Haptic.Tap)
+                    close(onChangeTime)
+                })
+                SheetRow(Icons.Rounded.Edit, "Edit", "Back into the message box", 2, 4, onClick = {
+                    haptics.play(Haptic.Tap)
+                    close(onEdit)
+                })
+                SheetRow(Icons.Rounded.Delete, "Delete", null, 3, 4, tint = MaterialTheme.colorScheme.error, onClick = {
+                    haptics.play(Haptic.Delete)
+                    close(onDelete)
+                })
+            }
         }
     }
 }

@@ -8,6 +8,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
+import androidx.core.content.LocusIdCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import android.graphics.drawable.BitmapDrawable
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -85,8 +92,9 @@ object Notifier {
     ) {
         if (!canPost(context)) return
         if (verdict.category == Category.Promotions && verdict.otp == null && !promoNotifications) return
-        val avatar = avatar(context, sender)
         val otp = verdict.otp
+        val conversation = otp == null && isPerson(sender.key)
+        val avatar = avatar(context, sender, circle = !conversation)
         val channel = when {
             otp != null -> CH_OTP
             verdict.category == Category.Personal -> CH_PERSONAL
@@ -112,15 +120,23 @@ object Notifier {
                 .addAction(0, "Copy $otp", action(context, NotificationActionReceiver.COPY, sender.key, otp))
                 .addAction(0, "Mark read", action(context, NotificationActionReceiver.MARK_READ, sender.key))
         } else {
+            val icon = if (conversation) IconCompat.createWithAdaptiveBitmap(adaptive(avatar, sender.title)) else avatar?.let(IconCompat::createWithBitmap)
             val them = Person.Builder()
                 .setName(sender.title)
                 .setKey(sender.key)
-                .apply { avatar?.let { setIcon(IconCompat.createWithBitmap(it)) } }
+                .setIcon(icon)
+                .setImportant(sender.isContact)
+                .apply { sender.replyAddresses.singleOrNull()?.let { setUri("tel:$it") } }
                 .build()
             val me = Person.Builder().setName("You").build()
+            val group = sender.key.startsWith("t:")
             val style = NotificationCompat.MessagingStyle(me)
+                .setGroupConversation(group)
+                .setConversationTitle(if (group) sender.title else null)
             recent.takeLast(HISTORY).forEach { style.addMessage(it.body, it.date, if (it.incoming) them else me) }
             builder.setStyle(style)
+            // a long-lived shortcut is what files it under Conversations: big avatar, priority, bubbles
+            if (conversation) builder.setShortcutInfo(conversationShortcut(context, sender, them, icon))
             if (sender.canReply) {
                 val input = RemoteInput.Builder(REPLY_KEY).setLabel("Reply").build()
                 builder.addAction(
@@ -141,6 +157,43 @@ object Notifier {
         NotificationManagerCompat.from(context).notify(id(sender.key), builder.build())
     }
 
+    private fun isPerson(senderKey: String) = senderKey.startsWith("p:") || senderKey.startsWith("t:")
+
+    private fun conversationShortcut(context: Context, sender: SenderInfo, person: Person, icon: IconCompat?): ShortcutInfoCompat {
+        val shortcut = ShortcutInfoCompat.Builder(context, sender.key)
+            .setShortLabel(sender.title)
+            .setLongLived(true)
+            .setPerson(person)
+            .setIcon(icon)
+            .setLocusId(LocusIdCompat(sender.key))
+            .setIntent(Intent(context, MainActivity::class.java).setAction(Intent.ACTION_VIEW).putExtra(EXTRA_SENDER, sender.key))
+            .build()
+        ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+        return shortcut
+    }
+
+    /** the photo inside the 72-of-108 safe zone of an adaptive icon, or a coloured initial filling it */
+    private fun adaptive(photo: Bitmap?, title: String): Bitmap {
+        val out = Bitmap.createBitmap(ADAPTIVE_PX, ADAPTIVE_PX, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val inset = ADAPTIVE_PX / 6f
+        if (photo != null) {
+            canvas.drawColor(android.graphics.Color.WHITE)
+            canvas.drawBitmap(photo, null, RectF(inset, inset, ADAPTIVE_PX - inset, ADAPTIVE_PX - inset), Paint(Paint.FILTER_BITMAP_FLAG))
+        } else {
+            canvas.drawColor(MONOGRAM_COLORS[(title.hashCode() and Int.MAX_VALUE) % MONOGRAM_COLORS.size])
+            val letter = title.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "#"
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textSize = ADAPTIVE_PX * 0.3f
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            canvas.drawText(letter, ADAPTIVE_PX / 2f, ADAPTIVE_PX / 2f - (paint.descent() + paint.ascent()) / 2f, paint)
+        }
+        return out
+    }
+
     fun notSent(context: Context, address: String) {
         if (!canPost(context)) return
         val notification = NotificationCompat.Builder(context, CH_FAILED)
@@ -157,18 +210,21 @@ object Notifier {
         NotificationManagerCompat.from(context).cancel(id(senderKey))
     }
 
-    private suspend fun avatar(context: Context, sender: SenderInfo): Bitmap? {
+    private suspend fun avatar(context: Context, sender: SenderInfo, circle: Boolean): Bitmap? {
         val data: Any = sender.photo ?: sender.logoDomain?.let(::logoUrl) ?: return null
         val result = context.imageLoader.execute(
             ImageRequest.Builder(context)
                 .data(data)
                 .size(AVATAR_PX)
                 .allowHardware(false)
-                .transformations(CircleCropTransformation())
+                .apply { if (circle) transformations(CircleCropTransformation()) }
                 .build()
         )
         return (result.drawable as? BitmapDrawable)?.bitmap
     }
 
     private const val AVATAR_PX = 192
+    private const val ADAPTIVE_PX = 288
+    // Google's own avatar hues, so initials sit well beside Messages-blue
+    private val MONOGRAM_COLORS = intArrayOf(0xFF1A73E8.toInt(), 0xFF188038.toInt(), 0xFFE37400.toInt(), 0xFFD93025.toInt(), 0xFF9334E6.toInt(), 0xFF007B83.toInt())
 }

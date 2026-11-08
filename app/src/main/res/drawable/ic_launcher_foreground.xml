@@ -1,25 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- a tilted letter with a "new message" dot, inside the 66dp safe zone -->
+<!-- a message bubble folded like a letter: messages at a glance, chitthi on a second look -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:rotation="-8" android:pivotX="54" android:pivotY="56">
-        <path
-            android:fillColor="#FFFFFFFF"
-            android:pathData="M37,37h34a10,10 0,0 1,10 10v18a10,10 0,0 1,-10 10h-34a10,10 0,0 1,-10 -10v-18a10,10 0,0 1,10 -10z" />
-        <path
-            android:pathData="M37,47L50.8,57.4a5.4,5.4 0,0 0,6.4 0L71,47"
-            android:strokeColor="#FF1A73E8"
-            android:strokeWidth="5"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
+    <group android:pivotX="54" android:pivotY="56" android:scaleX="0.84" android:scaleY="0.84">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M42,31H66A14,14 0,0 1,80 45V59A14,14 0,0 1,66 73H47L36.6,80.8C35.3,81.8 33.5,80.8 33.7,79.2L34.6,72.1A14,14 0,0 1,28 60V45A14,14 0,0 1,42 31Z" />
+        <path android:pathData="M39.5,44.5L51.2,53.4a4.6,4.6 0,0 0,5.6 0L68.5,44.5" android:strokeColor="#FF1A73E8" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" />
     </group>
-    <path
-        android:fillColor="#FF2D74DD"
-        android:pathData="M68.5,35.5a10,10 0,1 0,20 0a10,10 0,1 0,-20 0z" />
-    <path
-        android:fillColor="#FFFF8A65"
-        android:pathData="M71.5,35.5a7,7 0,1 0,14 0a7,7 0,1 0,-14 0z" />
 </vector>

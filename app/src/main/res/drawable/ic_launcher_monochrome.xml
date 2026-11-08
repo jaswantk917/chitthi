@@ -1,23 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- themed icons tint by alpha only, so the letter is drawn as an outline -->
+<!-- themed icons tint by alpha only, so the bubble is drawn as an outline around the fold -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:rotation="-8" android:pivotX="54" android:pivotY="56">
-        <path
-            android:pathData="M37,39.5h34a7.5,7.5 0,0 1,7.5 7.5v18a7.5,7.5 0,0 1,-7.5 7.5h-34a7.5,7.5 0,0 1,-7.5 -7.5v-18a7.5,7.5 0,0 1,7.5 -7.5z"
-            android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="5" />
-        <path
-            android:pathData="M37,47L50.8,57.4a5.4,5.4 0,0 0,6.4 0L71,47"
-            android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="5"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
+    <group android:pivotX="54" android:pivotY="56" android:scaleX="0.84" android:scaleY="0.84">
+        <path android:pathData="M42,31H66A14,14 0,0 1,80 45V59A14,14 0,0 1,66 73H47L36.6,80.8C35.3,81.8 33.5,80.8 33.7,79.2L34.6,72.1A14,14 0,0 1,28 60V45A14,14 0,0 1,42 31Z" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineJoin="round" />
+        <path android:pathData="M39.5,44.5L51.2,53.4a4.6,4.6 0,0 0,5.6 0L68.5,44.5" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" />
     </group>
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M71.5,35.5a7,7 0,1 0,14 0a7,7 0,1 0,-14 0z" />
 </vector>
